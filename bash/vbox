@@ -1,0 +1,268 @@
+#! /bin/bash
+# ---------------------------------------------------------------------------
+# vbox - This script controls virtual boxes without gui, simplifying the Oracle VirtualBox API, like vagrant
+
+# Copyright 2014, jarbas.lima,jjocenio@gmail.com
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License at (http://www.gnu.org/licenses/) for
+# more details.
+
+# Usage: vbox [-h|--help] [OPTIONS] <command> [<alias>]
+#
+# Commands
+#   list	lists all known boxes
+#   add		adds a box into known boxes list
+#   del		deletes a box from known boxes list
+#   info	shows informations about a virtual box
+#   start	starts a virtual box
+#   stop	stops a virtual box
+#   ssh		opens a ssh connection to a virtual box
+#
+# Options
+#   -n name	the virtual box name
+#   -u user	the username to use on ssh connection
+#   -i ip	the virtual box ip address
+
+# Revision history:
+# 2014-11-24	Created 
+# ---------------------------------------------------------------------------
+
+PROGNAME=${0##*/}
+VERSION="0.1"
+
+## PUT FUNCTIONS HERE AND ADD TO main()
+
+main(){
+	case "$cmd" in
+		list)
+			list
+			;;
+		add)
+			add
+			;;
+		del)
+			del
+			;;
+		info)
+			info
+			;;
+		start)
+			start
+			;;
+		stop)
+			stop
+			;;
+		ssh)
+			openssh
+			;;
+		*)
+			help_message; error_exit "Command not found."
+	esac
+}
+
+list() {
+	for a in ~/.vbox/*.conf
+	do
+		info $a
+	done
+
+	echo ""
+}
+
+add() {
+	if [[ -e $fileconf ]]; then
+		error_exit "Alias already exists"
+	fi
+
+	echo "BOX_ALIAS=$alias" > $fileconf
+	echo "BOX_NAME=$name" >> $fileconf
+	echo "BOX_USER=$user" >> $fileconf
+	echo "BOX_IP=$ip" >> $fileconf
+
+	echo "VBox $alias registered"
+}
+
+del() {
+	rm -f $fileconf
+	echo "VBox $alias unregistered"
+}
+
+info() {
+	if [[ "$1" ]]; then	
+		source $1
+	fi
+
+	echo ""
+        echo "Alias       : " $BOX_ALIAS
+        echo "Name        : " $BOX_NAME
+        echo "User / IP   : " $BOX_USER " / " $BOX_IP
+        echo "UUID        : " $(getVmInfo "$BOX_NAME" "hardwareuuid" )
+        echo "Description : " $(getVmInfo "$BOX_NAME" "description")
+        echo "OS Type     : " $(getVmInfo "$BOX_NAME" "ostype")
+        echo "CPU / Mem   : " $(getVmInfo "$BOX_NAME" "cpus" ) " / " $(getVmInfo "$BOX_NAME" "memory" ) "MB"
+        echo "Status      : " $(getVmInfo "$BOX_NAME" "VMState" )
+
+	[[ ! "$1" ]] && echo ""
+}
+
+start() {
+	/usr/lib/virtualbox/VBoxHeadless -s $BOX_NAME -v off &
+}
+
+stop() {
+	/usr/lib/virtualbox/VBoxManage controlvm $BOX_NAME acpipowerbutton
+}
+
+openssh() {
+	ssh $BOX_USER@$BOX_IP
+}
+
+getVmInfo() {
+	namevm=$1
+	info=$2
+	echo `VBoxManage showvminfo "$namevm" --machinereadable | egrep -i "^$info=" | sed "s/${info}=\(.*\)/\1/i;s/\"//g"`
+}
+
+## END of Script Specific Code
+
+clean_up() { # Perform pre-exit housekeeping
+	debug "Cleaning up..."
+	return
+}
+
+error_exit() {
+	error "${PROGNAME}: ${1:-"Unknown Error"}" >&2
+	clean_up
+	exit 1
+}
+
+graceful_exit() {
+	clean_up
+	debug "...Finished"
+	exit
+}
+
+signal_exit() { # Handle trapped signals
+	case $1 in
+		INT)    error_exit "Program interrupted by user" ;;
+		TERM)   echo -e "\n$PROGNAME: Program terminated" >&2 ; graceful_exit ;;
+		*)      error_exit "$PROGNAME: Terminating on unknown signal" ;;
+	esac
+}
+
+require() { 
+    if command -v $1 >/dev/null; then
+      debug ""$1" found in path!"
+    else
+      error ""$1" is not in your path. Please set the PATH correctly."
+      exit 0
+    fi
+}
+
+usage() {
+	echo -e "Usage: $PROGNAME [-h|--help] [OPTIONS] <command> [<alias>]"
+}
+
+# Set Logging
+exec 3>&2 # logging stream (file descriptor 3) defaults to STDERR
+silent_lvl=0; err_lvl=1; wrn_lvl=2; dbg_lvl=3; inf_lvl=4 # Set logging levels
+notify() { log $silent_lvl "${TBLD}[NOTE]:${TRST} $1"; } # Always prints
+error() { log $err_lvl "${TRST}${FRED}${TBLD}[ERROR]: ${TRST}${FRED}$1${TRST}"; }
+warn() { log $wrn_lvl "${TRST}${FYLW}${TBLD}[WARNING]:${TRST} $1"; }
+debug() { log $dbg_lvl "${TRST}${FCYN}${TBLD}[DEBUG]:${TRST} $1"; }
+inf() { log $inf_lvl "${TRST}${FWHT}${TBLD}[INFO]:${TRST} $1"; } # "info" is already a command
+log() {
+	if [ -z $ver_lvl ]; then ver_lvl=2; fi # default to show warnings
+    if [ $ver_lvl -ge $1 ]; then
+        # Expand escaped characters, wrap at 70 chars, indent wrapped lines
+        printf "$NOW $2\n" | fold -w70 -s >&3 #| sed '2~1s/^/  /' >&3
+    fi
+}
+
+help_message() {
+	cat <<- _EOF_
+	$PROGNAME ver. $VERSION
+	This script controls virtual boxes without gui, simplifying the Oracle VirtualBox API, like vagrant
+
+	$(usage)
+
+	Commands
+	  list        lists all known boxes
+	  add         adds a box into known boxes list
+	  del         deletes a box from known boxes list
+	  info        shows informations about a virtual box
+	  start       starts a virtual box
+	  stop        stops a virtual box
+	  ssh         opens a ssh connection to a virtual box
+	
+	Options
+	  -n name     the virtual box name
+	  -u user     the username to use on ssh connection
+	  -i ip       the virtual box ip address
+
+	_EOF_
+	return
+}
+
+# Trap signals
+trap "signal_exit TERM" TERM HUP
+trap "signal_exit INT"  INT
+
+
+# Parse command-line
+while [[ -n $1 ]]; do
+	case $1 in
+		-h | --help)	help_message; graceful_exit ;;
+		-n )		name=$2; shift ;;
+		-u )		user=$2; shift ;;
+		-i )		ip=$2; shift ;;
+		-* | --*)	usage; error_exit "Unknown option $1" ;;
+		*)		cmd=$1 ; alias=$2; shift ;;
+	esac
+	shift
+done
+
+fileconf=~/.vbox/"$alias".conf
+
+startup(){
+	# Source Config File
+	if [[ -e ~/."$filename".conf ]]; then source ~/."$filename".conf
+	elif [[ -e /etc/"$filename".conf ]]; then source /etc/"$filename".conf
+	fi
+
+	if [[ ! "$cmd" ]]; then
+		usage; error_exit "Command is required"
+	fi
+
+	if [[ ! "$alias" && "$cmd" != "list" ]]; then
+		usage; error_exit "Incomplete arguments"
+	fi
+
+	if [[ "$cmd" == "add" ]]; then
+                if [[ ! "$name" || ! "$user" || ! "$ip" ]]; then
+			usage; error_exit "Name, user and ip options are required"
+		fi
+        fi
+
+	if [[ "$cmd" != "add" && "$cmd" != "list" && ! -e $fileconf ]]; then
+		error_exit "Unknown box. Try add it first"
+	fi
+
+	if [[ "$cmd" != "list" ]]; then
+		source $fileconf
+	fi
+}
+
+# Main logic
+startup
+main
+graceful_exit
+

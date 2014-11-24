@@ -82,8 +82,8 @@ add() {
 		error_exit "Alias already exists"
 	fi
 
-	echo "BOX_ALIAS=$alias" > $fileconf
-	echo "BOX_NAME=$name" >> $fileconf
+	echo "BOX_ALIAS=\"$alias\"" > $fileconf
+	echo "BOX_NAME=\"$name\"" >> $fileconf
 	echo "BOX_USER=$user" >> $fileconf
 	echo "BOX_IP=$ip" >> $fileconf
 
@@ -252,11 +252,11 @@ startup(){
 		fi
         fi
 
-	if [[ "$cmd" != "add" && "$cmd" != "list" && ! -e $fileconf ]]; then
-		error_exit "Unknown box. Try add it first"
-	fi
+	if [[ "$cmd" != "add" && "$cmd" != "list" ]]; then
+		if [[ ! -e $fileconf ]]; then
+			error_exit "Unknown box. Try add it first"
+		fi
 
-	if [[ "$cmd" != "list" ]]; then
 		source $fileconf
 	fi
 }

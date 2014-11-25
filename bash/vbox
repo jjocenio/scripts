@@ -114,11 +114,11 @@ info() {
 }
 
 start() {
-	/usr/lib/virtualbox/VBoxHeadless -s $BOX_NAME -v off &
+	/usr/lib/virtualbox/VBoxHeadless -s "$BOX_NAME" -v off &
 }
 
 stop() {
-	/usr/lib/virtualbox/VBoxManage controlvm $BOX_NAME acpipowerbutton
+	/usr/lib/virtualbox/VBoxManage controlvm "$BOX_NAME" acpipowerbutton
 }
 
 openssh() {

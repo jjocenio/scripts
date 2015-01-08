@@ -1,43 +1,48 @@
-import ConfigParser
-import csv
-import json
-import os
-import requests
-import sys
+#!/usr/bin/python2.7
 
-from requests.auth import HTTPBasicAuth
+from functions import *
 
-config=ConfigParser.ConfigParser()
-config.readfp(open("config.ini"))
-csvFileName="jira.csv" if len(sys.argv) < 2 else sys.argv[1]
+def assign(dictData):
+	url = "%s/rest/api/2/issue/%s/assignee" % (config.get("jira", "url"), getKey(dictData))
+	jsonData = { "name" : getValue(dictData, "field.assignee.name") }
+	response = requests.put(url, data=json.dumps(jsonData, ensure_ascii=False), headers=headers, auth=getAuth(dictData))
+	verifyResponse(url, dictData, jsonData, response, "ASSIGNEE")
 
-def getAuth(dictData):
-	username = dictData["username"] if "username" in dictData else "admin"
-	password = config.get("passwords", username) if config.has_option("passwords", username) else "123"
-	return HTTPBasicAuth(username, password)
+def comment(dictData):
+	url = "%s/rest/api/2/issue/%s/comment" % (config.get("jira", "url"), getKey(dictData))
+	jsonData = { "body" : getValue(dictData, "update.comment")[0]["add"]["body"] }
+	response = requests.post(url, data=json.dumps(jsonData, ensure_ascii=False), headers=headers, auth=getAuth(dictData))
+	verifyResponse(url, dictData, jsonData, response, "COMMENT")	
 
-def getData(dictData):
-	jsonData = { "transition" : config.get("transitions", dictData.get("transition")) }
-	fields = {}
-
-	listFields = filter(lambda key : key.startswith("field."), dictData.keys())
-	for field in listFields:
-		fields[field.replace("field.", "")] = dictData[field]
-	
-	if len(fields) > 0:	
-		jsonData["fields"] = fields
-
-	print jsonData
-	return json.dumps(jsonData, ensure_ascii=False)
+def timesheet(dictData):
+	url = "%s/rest/api/2/issue/%s/worklog" % (config.get("jira", "url"), getKey(dictData))
+	jsonData = getValue(dictData, "update.worklog")[0]["add"]
+	merge(jsonData, { "comment" : getValue(dictData, "update.comment")[0]["add"]["body"] })
+	response = requests.post(url, data=json.dumps(jsonData, ensure_ascii=False), headers=headers, auth=getAuth(dictData))
+	verifyResponse(url, dictData, jsonData, response, "TIMESHEET")
 
 def send(dictData):
-	url = "%s/rest/api/2/issue/%s/transitions" % (config.get("jira", "url"), dictData["key"])	
-	print dictData["key"]
-	response = requests.post(url, data=getData(dictData), headers={'content-type': 'application/json'}, auth=getAuth(dictData))
-	print response.text
+	context["index"] = int(re.split("[-/]", getKeyValue(dictData))[0])
+	if "key" in context:
+		context.pop("key")
+	if dictData["transition"] == "IN_PROGRESS":
+		assign(dictData)
+		comment(dictData)
+		dictData["username"] = dictData["field.assignee.name"]
+		dictData.pop("update.comment")
+		dictData.pop("field.assignee.name")
+	elif dictData["transition"] == "LANCAR_HORAS":
+		timesheet(dictData)
+		return
+	url = "%s/rest/api/2/issue/%s/transitions" % (config.get("jira", "url"), getKey(dictData))
+	jsonData = { "transition" : getTransition(dictData) }
+	response = requests.post(url, data=getData(dictData, jsonData=jsonData) , headers=headers, auth=getAuth(dictData))
+	verifyResponse(url, dictData, jsonData, response, "SEND")
 
 if os.path.exists(csvFileName):
 	with open(csvFileName, "r") as csvFile:
 		data = csv.DictReader(csvFile)
+		context["ln"] = 0
 		for transiction in data:
+			context["ln"] = context["ln"] + 1
 			send(transiction)

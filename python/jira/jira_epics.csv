@@ -1,0 +1,14 @@
+field.project.id,field.issuetype.name,field.customfield_10604,field.customfield_10502.value,field.summary,field.customfield_10009,field.customfield_10504,field.customfield_10505,username,password
+DATASUS.842014,Epic,001/2014,CADSUS 5,Projeto CADSUS v5 - Fase Analise e Arquitetura,Projeto CADSUS v5 - Fase Analise e Arquitetura,10/10/2014,11/17/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,002/2014,Suporte,Projeto Monitoração e Suporte - Novembro,Projeto Monitoração e Suporte - Novembro,10/10/2014,11/7/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,003/2014,Segurança 1.0,Projeto Segurança Integrada v1 - Fase Analise e Arquitetura,Projeto Segurança Integrada v1 - Fase Analise e Arquitetura,10/15/2014,10/29/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,004/2014,PIX/PDQ 1.0,Projeto PIX-PDQ v1 - Fase Analise e Arquitetura,Projeto PIX-PDQ v1 - Fase Analise e Arquitetura,10/14/2014,10/31/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,005/2014,CADSUS 5,Projeto CADSUS v5 - Fase Desenvolvimento e Teste - SOA,Projeto CADSUS v5 - Fase Desenvolvimento e Teste - SOA,10/14/2014,11/19/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,006/2014,CADSUS 5,Projeto CADSUS v5 - Fase Desenvolvimento - WEB,Projeto CADSUS v5 - Fase Desenvolvimento - WEB,10/24/2014,12/4/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,007/2014,Segurança 1.0,Projeto Segurança Integrada v1 - Fase Desenvolvimento,Projeto Segurança Integrada v1 - Fase Desenvolvimento,10/30/2014,12/3/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,008/2014,PIX/PDQ 1.0,Projeto PIX-PDQ v1 - Fase Desenvolvimento,Projeto PIX-PDQ v1 - Fase Desenvolvimento,11/3/2014,11/28/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,009/2014,Suporte,Projeto Monitoração e Suporte - Exalogic,Projeto Monitoração e Suporte - Exalogic,11/4/2014,11/17/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,010/2014,CADSUS 5,Projeto CADSUS v5 - Fase Teste - Parte 1,Projeto CADSUS v5 - Fase Teste - Parte 1,11/1/2014,11/8/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,011/2014,Segurança 1.0,Projeto Segurança Integrada v1 - Fase Teste,Projeto Segurança Integrada v1 - Fase Teste,11/4/2014,12/8/2014,sergio.correia.ms,123456
+DATASUS.842014,Epic,012/2014,Suporte,Projeto Monitoração e Suporte - Dezembro,Projeto Monitoração e Suporte - Dezembro,11/18/2014,12/10/2014,julioc.araujo.ms,123456
+DATASUS.842014,Epic,013/2014,CADSUS 5,Projeto CADSUS v5 - Fase Teste - Parte 2,Projeto CADSUS v5 - Fase Teste - Parte 2,11/26/2014,12/10/2014,sergio.correia.ms,123456

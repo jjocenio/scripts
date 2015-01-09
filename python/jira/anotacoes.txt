@@ -1,8 +1,9 @@
-Adicionar o campo timetracking da tela de atividades para a carga. - Somente necessário se usando o campo timetracking
-Alterar o campo de catálogo para "Monitoração da Infraestrutura", com I maiúsculo.
 Os epic names devem ser únicos.
 Verificar as demandas para evitar epic link ambiguo.
-Executar primeiro a carga de epics, depois a de demandas. Em seguida, executar as transições dos epics sem a transição final. Depois executar as transições das demandas e por último executar a finalização dos epics.
+Adicionar o campo timetracking da tela de atividades para a carga. - Somente necessário se usando o campo timetracking
 Executar o script firs_login.py para ativar os usuários.
 Remover o captch dos usuários que o requerem no login.
+Alterar o campo de catálogo para "Monitoração da Infraestrutura", com I maiúsculo.
 Alterar o epic DATCADSUS-2 mudando o número da ordem de serviço para XX/2014.
+Executar primeiro a carga de epics, depois a de demandas. Em seguida, executar as transições dos epics sem a transição final. Depois executar as transições das demandas e por último executar a finalização dos epics.
+

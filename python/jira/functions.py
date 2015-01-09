@@ -28,7 +28,7 @@ def addData(data, name, partData):
 
 def getAuth(dictData):
 	username = getValue(dictData, "username") if "username" in dictData else "admin"
-	password = config.get("passwords", username) if config.has_option("passwords", username) else "123456"
+	password = config.get("passwords", username) if config.has_option("passwords", username) else "emifer_716717"
 	return HTTPBasicAuth(username, password)
 
 def getData(dictData, jsonData = {}):

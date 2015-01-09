@@ -36,7 +36,6 @@ jorge.junior
 jose.bazaga
 joyce.souza
 juliano.santos
-julioc.araujo.ms
 julio.lemes
 ligia.vieira
 luelson.nunes
@@ -56,7 +55,6 @@ rodrigo.kruger
 rodrigo.santos
 rodrigo.soares
 ryan.thuin
-sergio.correia.ms
 thalles.amorim
 ulisses.carvalho
 vinicius.pires

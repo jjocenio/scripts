@@ -155,7 +155,7 @@ stop() {
 }
 
 openssh() {
-	ssh $BOX_USER@$BOX_IP
+	ssh -X $BOX_USER@$BOX_IP
 }
 
 getVmInfo() {

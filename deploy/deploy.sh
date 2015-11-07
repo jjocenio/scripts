@@ -149,7 +149,8 @@ create_deploy_file() {
   cat <<- _EOF_ > deploy.sh
 #!/bin/bash
 exists=\`docker images | grep -wc ${docker_id}\`
-if [[ \$exists -eq 1 ]]; then
+running=\`docker ps | grep -wc ${docker_id}\`
+if [[ \$running -eq 1 ]]; then
   echo "Stopping docker ${docker_id}"
   docker stop ${docker_id}
 fi

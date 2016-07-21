@@ -69,18 +69,23 @@ main(){
 }
 
 list() {
-	for a in ~/.vbox/*.conf
-	do
-		info $a
-	done
+	if [[ -d ~/.vbox ]]; then
+		for a in ~/.vbox/*.conf
+		do
+			info $a
+		done
 
-	echo ""
+		echo ""
+	fi
 }
 
 add() {
 	if [[ -e $fileconf ]]; then
 		error_exit "Alias already exists"
 	fi
+
+	mkdir -p ~/.vbox
+	touch $fileconf
 
 	echo "BOX_ALIAS=\"$alias\"" > $fileconf
 	echo "BOX_NAME=\"$name\"" >> $fileconf
@@ -115,14 +120,42 @@ info() {
 
 start() {
 	/usr/lib/virtualbox/VBoxHeadless -s "$BOX_NAME" -v off &
+
+	retries=${BOX_RETRIES:-10}
+
+	try=1
+	while [[ $try -le $retries ]]; do
+		nc -w 100 -z $BOX_IP 22
+		if [[ $? -eq 0 ]]; then
+			break
+		else
+			try=`expr $try + 1`
+		fi
+	done
+
+	if [[ $try -lt $retries ]]; then
+		echo "VBox $BOX_NAME is running"
+	else
+		error_exit "Timeout waiting for $BOX_NAME starts"
+	fi
 }
 
 stop() {
 	/usr/lib/virtualbox/VBoxManage controlvm "$BOX_NAME" acpipowerbutton
+	try=1
+	while [[ $(getVmInfo "$BOX_NAME" "VMState") != "poweroff" ]]; do
+		try=`expr $try + 1`
+		if [[ $try -gt 30 ]]; then
+			error_exit "Timeout waiting for $BOX_NAME stops"
+		fi
+		sleep 1
+	done
+	
+	echo "VBox $BOX_NAME is stopped"
 }
 
 openssh() {
-	ssh $BOX_USER@$BOX_IP
+	ssh -X $BOX_USER@$BOX_IP
 }
 
 getVmInfo() {

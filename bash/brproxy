@@ -1,0 +1,412 @@
+#!/bin/bash
+# ---------------------------------------------------------------------------
+# brproxy - Create/destroy an aws ec2 instance running a tinyproxy on Brazil in order to access restrict content
+
+# Copyright 2017, Jarbas Lima,,, <jarbas@S46CB>
+  
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License at <http://www.gnu.org/licenses/> for
+# more details.
+
+# Usage: brproxy [-h|--help] [-d|--destroy] [-i pemfile] [-r|--region region] [-k|--create-key-pair] [-s|--security-group-id sgid] [-n|--subnet-id snid] [-v|--vpc-id vpc-id]
+
+# Revision history:
+# 2017-10-11 Created by new_script.sh ver. 3.3
+# ---------------------------------------------------------------------------
+
+PROGNAME=${0##*/}
+VERSION="0.1"
+
+USER="ec2-user"
+SETUP_SCRIPT="setup.sh"
+SETUP_SCRIPT_PATH="/tmp/${SETUP_SCRIPT}"
+QUERY_COMMAND="aws ec2 describe-instances --output text --filter 'Name=tag:Proxy,Values=true,Name=instance-state-name,Values=running'"
+CIDR_BLOCK="172.30.0.0/16"
+DEFAULT_KEY_NAME="proxy"
+
+region="sa-east-1"
+pemfile="$HOME/.ssh/id_rsa"
+
+clean_up() { # Perform pre-exit housekeeping
+  return
+}
+
+error_exit() {
+  echo -e "${PROGNAME}: ${1:-"Unknown Error"}" >&2
+  clean_up
+  exit 1
+}
+
+graceful_exit() {
+  clean_up
+  exit
+}
+
+signal_exit() { # Handle trapped signals
+  case $1 in
+    INT)
+      error_exit "Program interrupted by user" ;;
+    TERM)
+      echo -e "\n$PROGNAME: Program terminated" >&2
+      graceful_exit ;;
+    *)
+      error_exit "$PROGNAME: Terminating on unknown signal" ;;
+  esac
+}
+
+usage() {
+  echo -e "Usage: $PROGNAME [-h|--help] \
+      [-d|--destroy] [-i pemfile] \
+      [-r|--region region] \
+      [-k|--create-key-pair] \
+      [-s|--security-group-id sgid] \
+      [-n|--subnet-id snid] \
+      [-v|--vpc-id vpcid]"
+}
+
+help_message() {
+  cat <<- _EOF_
+  $PROGNAME ver. $VERSION
+  Create/destroy an aws ec2 instance running a tinyproxy on Brazil in order to access restrict content
+
+  $(usage)
+
+  Options:
+  -h, --help  Display this help message and exit.
+  -d, --destroy  destroy the instance
+  -i pemfile  use the specified identity file
+    Where 'pemfile' is the the file path with the key-pair.
+  -r, --region region  specify the region
+    Where 'region' is the region to deploy the instance (default sa-east-1).
+  -k, --create-key-pair  create the key-pair
+  -s, --security-group-id sgid  specify the security group id
+    Where 'sgid' is the the security group id.
+  -n, --subnet-id snid  specify the subnet id
+    Where 'snid' is the is the subnet id.
+  -v, --vpc-id vpcid  specify the vpc id
+    Where 'vpcid' is the id of the vpc
+
+_EOF_
+  return
+}
+
+get_host() {
+    echo "Getting host ..."
+    command="${QUERY_COMMAND} --query 'Reservations[].Instances[].PublicIpAddress'"
+    host=`eval ${command}`
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+get_instance_id() {
+    echo "Looking for running instances..."
+    command="${QUERY_COMMAND} --query 'Reservations[].Instances[].InstanceId'"
+    instance_id=`eval ${command}`
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+create_vpc() {
+    echo "Creating vpc for ${CIDR_BLOCK}"
+    vpcid=`aws ec2 create-vpc --cidr-block ${CIDR_BLOCK} --query 'Vpc.VpcId' --output text`
+
+    [[ $? -ne 0 ]] && error_exit
+
+    query_security_group
+    aws ec2 authorize-security-group-ingress --group-id ${sgid} --cidr 0.0.0.0/0 --port 22 --protocol tcp
+    aws ec2 authorize-security-group-ingress --group-id ${sgid} --cidr 0.0.0.0/0 --port 80 --protocol tcp
+}
+
+query_vpc() {
+    echo "Looking for vpc"
+    vpcid=`aws ec2 describe-vpcs --query 'Vpcs[].VpcId' --output text | cut -f 1` 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+get_vpc() {
+    if [[ "${vpcid}" == "" ]]; then
+        query_vpc
+        if [[ "${vpcid}" == "" ]]; then
+            create_vpc
+        fi
+    fi
+    echo "Using vpc ${vpcid}"
+}
+
+create_subnet() {
+    echo "Creating subnet for ${CIDR_BLOCK} and ${vpcid}"
+    snid=`aws ec2 create-subnet --cidr-block ${CIDR_BLOCK} --vpc-id ${vpcid} --query 'Subnet.SubnetId' --output text`
+    [[ $? -ne 0 ]] && error_exit
+
+    aws ec2 modify-subnet-attribute --subnet-id ${snid} --map-public-ip-on-launch
+}
+
+query_subnet() {
+    get_vpc
+
+    echo "Looking for subnet on ${vpcid}"
+    snid=`aws ec2 describe-subnets --filter "Name=vpc-id,Values=${vpcid}" --query "Subnets[].SubnetId" --output text | cut -f 1` 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+get_subnet() {
+    if [[ "${snid}" == "" ]]; then
+        query_subnet
+        if [[ "${snid}" == "" ]]; then
+            create_subnet
+        fi
+    fi
+    echo "Using subnet ${snid}"
+}
+
+attach_gateway() {
+    echo "Attaching internet gateway ${gwid} to ${vpcid}"
+    aws ec2 attach-internet-gateway --internet-gateway-id ${gwid} --vpc-id ${vpcid}
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+create_gateway() {
+    echo "Creating internet gateway"
+    gwid=`aws ec2 create-internet-gateway --query "InternetGateway.InternetGatewayId" --output text`
+
+    [[ $? -ne 0 ]] && error_exit
+
+    attach_gateway
+}
+
+query_gateway() {
+    echo "Looking for internet gateway"
+    gwid=`aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${vpcid}" --query "InternetGateways[].InternetGatewayId" --output text | cut -f 1`
+    if [[ "${gwid}" == "" ]]; then
+        gwid=`aws ec2 describe-internet-gateways --query "InternetGateways[].InternetGatewayId" --output text | cut -f 1`
+        if [[ "${gwid}" != "" ]]; then
+            attach_gateway
+        fi
+    fi
+}
+
+get_gateway() {
+    if [[ "${gwid}" == "" ]]; then
+        query_gateway
+        if [[ "${gwid}" == "" ]]; then
+            create_gateway
+        fi
+    fi    
+}
+
+get_route_table() {
+    echo "Looking for the route table"
+    rtid=`aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${vpcid}" --query "RouteTables[].RouteTableId" --output text | cut -f 1`
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+setup_route_table() {
+    get_route_table
+
+    echo "Creating route on ${rtid} for ${gwid}"
+    aws ec2 create-route --route-table-id ${rtid} --gateway-id ${gwid} --destination-cidr-block "0.0.0.0/0" --output text
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+query_security_group() {
+    echo "Looking for security group"
+    sgid=`aws ec2 describe-security-groups --filter "Name=vpc-id,Values=${vpcid}" --query "SecurityGroups[].GroupId" --output text | cut -f 1` 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+get_security_group() {
+    if [[ "${sgid}" == "" ]]; then
+        query_security_group
+    fi
+    echo "Using security group ${sgid}"
+}
+
+query_keyname() {
+    echo "Looking for keyname"
+    keyname=`aws ec2 describe-key-pairs --query 'KeyPairs[].KeyName' --output text | cut -f 1` 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+create_key_pair() {
+    echo "Creating key-pair"
+    aws ec2 create-key-pair --key-name ${DEFAULT_KEY_NAME} --output text --query KeyMaterial > ${pemfile} 
+    [[ $? -ne 0 ]] && error_exit
+    chmod 400 ${pemfile}
+
+    openssl rsa -in ${pemfile} -pubout > ${pemfile}.pub 
+    [[ $? -ne 0 ]] && error_exit
+    chmod 400 ${pemfile}.pub
+
+    keyname=${DEFAULT_KEY_NAME}
+}
+
+import_key_pair() {
+    echo "Importing key-pair"
+    if [[ -z ${pemfile}.pub ]]; then
+        openssl rsa -in ${pemfile} -pubout > ${pemfile}.pub 
+        [[ $? -ne 0 ]] && error_exit
+    fi
+
+    pubkey=`cat ${pemfile}.pub`
+    aws ec2 import-key-pair --key-name ${DEFAULT_KEY_NAME} --public-key-material "${pubkey}" --query "KeyName" --output text
+    [[ $? -ne 0 ]] && error_exit
+
+    keyname=${DEFAULT_KEY_NAME}
+}
+
+verify_key_pair() {
+    if [[ -e ${pemfile} ]]; then
+        import_key_pair
+    elif [[ "${_k}" == "true" ]]; then
+        create_key_pair
+    else
+        error_exit "Please, specify the pemfile or -k to create a new key-pair"
+    fi    
+}
+
+get_keyname() {
+    if [[ "${keyname}" == "" ]]; then
+        query_keyname
+        if [[ "${keyname}" == "" ]]; then
+            verify_key_pair
+        fi
+    fi
+    echo "Using keypair ${keyname}"
+}
+
+create_instance() {
+    echo "Creating instance"
+
+    get_subnet
+    get_gateway
+    setup_route_table
+
+    get_security_group
+    get_keyname
+
+    aws ec2 run-instances \
+        --image-id ami-f1344b9d \
+        --count 1 \
+        --region ${region:-"sa-east-1"} \
+        --instance-type t2.micro \
+        --key-name ${keyname} \
+        --subnet-id ${snid}  \
+        --security-group-ids ${sgid} \
+        --tag-specifications "ResourceType=instance,Tags=[{Key=Proxy,Value=true}]" \
+        --query "Instances.InstanceId" \
+        --output text
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+create_setup_script() {
+    echo "Generating setup script to ${SETUP_SCRIPT_PATH}..."
+    cat <<EOT > ${SETUP_SCRIPT_PATH}
+#!/bin/bash
+sudo yum -y update && sudo yum -y upgrade
+sudo yum -y install docker
+sudo service docker start
+sudo docker pull dannydirect/tinyproxy
+sudo docker stop tinyproxy
+sudo docker rm tinyproxy
+sudo docker run -d --name='tinyproxy' -p 80:8888 dannydirect/tinyproxy ANY
+EOT
+}
+
+upload_setup_script() {
+    echo "Uploading setup script... to ${USER}@${host}"
+    scp -i ${pemfile} ${SETUP_SCRIPT_PATH} ${USER}@${host}: 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+execute_setup_script() {
+    echo "Executing setup script... on ${USER}@${host}"
+    ssh -i ${pemfile} ${USER}@${host} "bash /home/${USER}/${SETUP_SCRIPT}" 
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+destroy_instance() {
+    get_instance_id
+    echo "Destroying ${instance_id} ..." 
+    aws ec2 terminate-instances --instance-ids ${instance_id} --output text
+
+    [[ $? -ne 0 ]] && error_exit
+}
+
+# Trap signals
+trap "signal_exit TERM" TERM HUP
+trap "signal_exit INT"  INT
+
+# Parse command-line
+while [[ -n $1 ]]; do
+  case $1 in
+    -h | --help)
+      help_message; graceful_exit ;;
+    -d | --destroy)
+      echo "destroy the instance" ; _d=true ;;
+    -i)
+      echo "identity file"; shift; pemfile="$1" ;;
+    -r | --region)
+      echo "the region to deploy the instance (default sa-east-1)"; shift; region="$1" ;;
+    -k | --create-key-pair)
+      echo "create the key-pair" ; _k=true ;;
+    -s | --security-group-ids)
+      echo "specify the security group id"; shift; sgid="$1" ;;
+    -n | --subnet-id)
+      echo "specify the subnet id"; shift; snid="$1" ;;
+    -v | --vpc-id)
+      echo "specify the vpc id"; shift; vpcid="$1" ;;
+    -* | --*)
+      usage
+      error_exit "Unknown option $1" ;;
+    *)
+      echo "Argument $1 to process..." ;;
+  esac
+  shift
+done
+
+host=""
+instance_id=""
+
+if [[ "$_d" == "true" ]]; then
+    destroy_instance
+    graceful_exit
+fi
+
+get_host
+
+echo "Current host: ${host}"
+if [[ "${host}" == "" ]]; then
+    create_instance
+
+    echo "Watting for the instance be ready..."
+    sleep 30
+
+    get_host
+    echo "New host: ${host}"
+fi
+
+create_setup_script
+upload_setup_script
+execute_setup_script
+
+echo "Proxy ready on ${host}:80"
+
+graceful_exit
+
